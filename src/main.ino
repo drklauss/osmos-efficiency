@@ -26,7 +26,7 @@ const float IN_RATIO = 3560.0;   // 1780 (кол-во тактов на 1л) * 2
 const float OUT_RATIO = 3430.0;  // 1715 (кол-во тактов на 1л) *2 для CHANGE
 
 uint32_t sendDelay = 0;
-const uint32_t sendPeriod = 90000;
+const uint32_t sendPeriod = 900000; // 15 минут
 
 // Setup
 void setup()
@@ -145,13 +145,13 @@ void sendData()
   // здесь происходит подмена сбрасываемой в канализацию воды на воду чистую в виде разницы воды пришедшей в систему и сброшенной
   // Сделано это потому что сброшенная вода интерес не представляет. Общий же объем нужен тоже только на первое время для контроля 
   // правильности расчета КПД
-  String clean_str = "{\"idx\":" + String(clean_idx) + ",\"svalue\":\"" + String(in-out) + "\"}";
+  String clean_str = "{\"idx\":" + String(clean_idx) + ",\"svalue\":\"" + String(clean) + "\"}";
   if (client.publish("domoticz/in", clean_str.c_str()))
   {
     flowOutput = 0.0;
   }
   float eff = clean / in * 100;
-  if (eff > 0)
+  if (eff > 0.0)
   {
     String eff_str = "{\"idx\":" + String(eff_idx) + ",\"svalue\":\"" + String(eff) + "\"}";
     client.publish("domoticz/in", eff_str.c_str());
