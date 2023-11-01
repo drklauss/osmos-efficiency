@@ -8,25 +8,31 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 
 // WI-Fi settings
-const char *ssid = "my-wi";
-const char *password = "qwerty12";
+const char *ssid = "my-fi";
+const char *password = "my-fipass";
 // domoticz
-const char *mqtt_server = "192.168.10.11";
+const char *mqtt_server = "192.168.10.100";
 #define TOPIC "domoticz/in"
-int in_idx = 1;
-int clean_idx = 2;
-int eff_idx = 3;
+int in_idx = 4;
+int clean_idx = 5;
 // sensors
 const uint8_t INC_FLOW = 12;
 const uint8_t OUT_FLOW = 14;
 
 volatile float flowInput = 0.0;  // объем входящего потока
-volatile float flowOutput = 0.0; // объем выброса в канализацию потока
-const float IN_RATIO = 3560.0;   // 1780 (кол-во тактов на 1л) * 2 для CHANGE
-const float OUT_RATIO = 3430.0;  // 1715 (кол-во тактов на 1л) *2 для CHANGE
+volatile float flowOutput = 0.0; // объем чистой воды на выходе из осмоса
+const float IN_RATIO = 1780.0;   // 1780 (кол-во тактов на 1л) * 2 для CHANGE
+const float OUT_RATIO = 1715.0;  // 1715 (кол-во тактов на 1л) *2 для CHANGE
 
-uint32_t sendDelay = 0;
-const uint32_t sendPeriod = 900000; // 15 минут
+const uint32_t sendPeriod = 1 * 60 * 1000; // 1 минута
+
+void wifiConnect();
+void initOTA();
+void mqttconnect();
+void run();
+void sendData();
+void incFlow();
+void outFlow();
 
 // Setup
 void setup()
@@ -69,14 +75,15 @@ void wifiConnect()
   {
     return;
   }
-  WiFi.hostname("ESP_water_calculator");
+
+  WiFi.hostname("ESP Osmos counter");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.printf("Connection status: %d\n", WiFi.status());
   while (WiFi.status() != WL_CONNECTED)
   {
     uint32_t uptime = millis();
-    // если в течение 5мин не подключается - перезагрузка МК
+    // restart ESP if could not connect during 5 minutes
     if (WiFi.status() != WL_CONNECTED && (uptime > 1000 * 60 * 5))
     {
       ESP.restart();
@@ -86,6 +93,7 @@ void wifiConnect()
     Serial.print(".");
     digitalWrite(LED_BUILTIN, LOW);
   }
+
   Serial.printf("\nConnection status: %d\n", WiFi.status());
   Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
   Serial.printf("RSSI: %d dBm\n", WiFi.RSSI());
@@ -115,6 +123,7 @@ void mqttconnect()
 // Main function
 void run()
 {
+  static uint32_t sendDelay;
   if (millis() - sendDelay <= sendPeriod)
   {
     return;
@@ -136,25 +145,15 @@ void sendData()
 {
   float in = flowInput / IN_RATIO;
   float out = flowOutput / OUT_RATIO;
-  float clean = in - out;
   String in_str = "{\"idx\":" + String(in_idx) + ",\"svalue\":\"" + String(in) + "\"}";
   if (client.publish("domoticz/in", in_str.c_str()))
   {
     flowInput = 0.0;
   }
-  // здесь происходит подмена сбрасываемой в канализацию воды на воду чистую в виде разницы воды пришедшей в систему и сброшенной
-  // Сделано это потому что сброшенная вода интерес не представляет. Общий же объем нужен тоже только на первое время для контроля 
-  // правильности расчета КПД
-  String clean_str = "{\"idx\":" + String(clean_idx) + ",\"svalue\":\"" + String(clean) + "\"}";
+  String clean_str = "{\"idx\":" + String(clean_idx) + ",\"svalue\":\"" + String(out) + "\"}";
   if (client.publish("domoticz/in", clean_str.c_str()))
   {
     flowOutput = 0.0;
-  }
-  float eff = clean / in * 100;
-  if (eff > 0.0)
-  {
-    String eff_str = "{\"idx\":" + String(eff_idx) + ",\"svalue\":\"" + String(eff) + "\"}";
-    client.publish("domoticz/in", eff_str.c_str());
   }
 }
 
